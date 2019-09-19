@@ -3,8 +3,11 @@ package cmd
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strings"
 	"sync"
+
+	"gopkg.in/ini.v1"
 
 	"github.com/fatih/color"
 	"github.com/songrgg/llsh/pkg/helper"
@@ -15,6 +18,8 @@ import (
 type options struct {
 	Command        string
 	Hosts          string
+	HostFile       string
+	Section        string
 	User           string
 	UseSSHCommand  bool
 	UsePassword    bool
@@ -43,6 +48,10 @@ func NewLLSHCommand() *cobra.Command {
 
 	cmds.PersistentFlags().StringVar(&options.Hosts, "hosts", "",
 		"The host names for remote server, split by comma, for example, host1,host2,host3")
+	cmds.PersistentFlags().StringVar(&options.HostFile, "host_file", "",
+		"The path of host file, the content should be hosts separated by new line, if specified, hosts will be omitted")
+	cmds.PersistentFlags().StringVar(&options.Section, "section", "",
+		"The section of the host_file, default to all hosts when not specified or empty")
 	cmds.PersistentFlags().StringVarP(&options.User, "user", "u", "",
 		"The username for login user")
 	cmds.PersistentFlags().StringVarP(&options.Command, "command", "c", "",
@@ -86,10 +95,55 @@ func (o *options) authMethods() []ssh.AuthMethod {
 	return authMethods
 }
 
+func (o *options) hosts() ([]string, error) {
+	if o.HostFile != "" {
+		//cfg, err := ini.Load(o.HostFile)
+		cfg, err := ini.LoadSources(ini.LoadOptions{SkipUnrecognizableLines: true}, o.HostFile)
+		if err != nil {
+			return nil, err
+		}
+
+		cfg, err = ini.LoadSources(ini.LoadOptions{
+			UnparseableSections: cfg.SectionStrings(),
+		}, o.HostFile)
+		if err != nil {
+			return nil, err
+		}
+
+		// Set to all roles which is the ini `DEFAULT` section.
+		var hosts []string
+		var sections []*ini.Section
+		if o.Section == "" {
+			sections = cfg.Sections()
+		} else {
+			sec, err := cfg.GetSection(o.Section)
+			if err != nil {
+				return nil, err
+			}
+			sections = append(sections, sec)
+		}
+
+		for _, sec := range sections {
+			for _, host := range strings.Split(string(sec.Body()), "\n") {
+				if h := strings.Trim(host, " "); h != "" {
+					hosts = append(hosts, h)
+				}
+			}
+		}
+		return hosts, nil
+	}
+	return strings.Split(o.Hosts, ","), nil
+}
+
 func (o *options) run() {
 	authMethods := o.authMethods()
 
-	hosts := strings.Split(o.Hosts, ",")
+	hosts, err := o.hosts()
+	if err != nil {
+		color.Red("Invalid hosts: %v", err)
+		os.Exit(1)
+	}
+
 	var wg sync.WaitGroup
 	var results []sshResult
 	var lock = sync.Mutex{}
@@ -134,7 +188,7 @@ func (o *options) run() {
 }
 
 func (o *options) validate() {
-	if o.Hosts == "" {
+	if o.HostFile == "" && o.Hosts == "" {
 		helper.Errorlq("hosts can't be empty")
 	}
 
