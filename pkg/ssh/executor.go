@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"syscall"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -19,12 +20,23 @@ func (t *Task) Execute() (string, error) {
 
 func (t *Task) executeWithCommand() (string, error) {
 	cmd := exec.Command(t.SSHCommandPath, t.Host, t.Script)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "fail to exec command: " + string(out), err
+	var b bytes.Buffer
+	cmd.Stdout = &b
+	cmd.Stderr = &b
+	if err := cmd.Start(); err != nil {
+		return "cmd.Start error", err
 	}
 
-	return string(out), nil
+	if err := cmd.Wait(); err != nil {
+		if exiterr, ok := err.(*exec.ExitError); ok {
+			if _, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+				return b.String(), nil
+			}
+		}
+		return "cmd.Wait error", err
+	}
+
+	return b.String(), nil
 }
 
 func (t *Task) execute() (string, error) {
