@@ -1,11 +1,11 @@
 module github.com/songrgg/llsh
 
-go 1.12
+go 1.15
 
 require (
-	github.com/fatih/color v1.7.0
-	github.com/mattn/go-colorable v0.1.2 // indirect
-	github.com/spf13/cobra v0.0.5
-	golang.org/x/crypto v0.0.0-20181203042331-505ab145d0a9
-	gopkg.in/ini.v1 v1.47.0
+	github.com/fatih/color v1.13.0
+	github.com/spf13/cobra v1.4.0
+	github.com/stretchr/testify v1.7.0 // indirect
+	golang.org/x/crypto v0.0.0-20220313003712-b769efc7c000
+	gopkg.in/ini.v1 v1.66.4
 )
